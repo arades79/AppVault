@@ -22,7 +22,9 @@ def as_packet(id, text):
     assert len(id) == 3, f"ID: {id}"
     size = len(text)
     size_as_bytes = bytes([255]*(size//255) + [size % 255] + [0])
-    return SOH + id + size_as_bytes + text + ETX + EOT
+    checksum = bytes([sum(text) % 255])
+    assert len(checksum) == 1
+    return SOH + id + size_as_bytes + text + ETX + checksum + EOT
 
 
 def get_selection(choices, query=None):
@@ -99,6 +101,11 @@ class Communicator:
         task_bytes = self.port.read_until(size=transmission_size)
         etx_bytes = self.port.read()
         assert etx_bytes == ETX, f"Expected {ETX}: {etx_bytes}"
+        checksum_byte = self.port.read()
+        computed_checksum = bytes([sum(task_bytes) % 255])
+        if computed_checksum != checksum_byte:
+            raise RuntimeError("Checksum did not match")
+            # TODO replace with more specific exception
         eot_bytes = self.port.read()
         assert eot_bytes == EOT, f"Expected {EOT}: {eot_bytes}"
         return identifier, task_bytes
